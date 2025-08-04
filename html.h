@@ -22,33 +22,67 @@ const char* HTML_CONTENT = R"RAW(
         .container { background-color: #fff; padding: 30px; border-radius: 5px; box-shadow: 0 6px 12px rgba(0,0,0,0.1); width: 90%; max-width: 400px; }
         h1 { text-align: center; color: #333; font-size: 2em;}
         h2 { text-align: center; color: #333; font-size: 1em;}
+        /* стиль для названия устройства */
         .name { text-align: center; color: #333; margin-bottom: 25px; }
+        /* стиль для модели устройства */
         .model { text-align: center; color: #333; margin-bottom: 16px; }
-        .switch-item { display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-bottom: 1px solid #eee; }
-        .switch-item:last-child { border-bottom: none; }
-        .switch-item span { font-size: 1.1em; color: #555; }
-        .switch { position: relative; display: inline-block; width: 90px; height: 34px; }
-        .switch input { opacity: 0; width: 0; height: 0; }
-        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; /* Серый цвет для состояния ВЫКЛ */ transition: .4s; border-radius: 12px; }
-        input:checked + .slider { background-color: #e74c3c; /* Красный цвет для состояния ВКЛ */ }
-        /* Стили для текста, который плавно появляется и исчезает */
-        .slider::before, .slider::after { display: flex; justify-content: center; align-items: center; position: absolute; width: 100%; height: 100%; font-size: 13px; font-weight: bold; color: #fff; transition: opacity 0.4s ease; }
-        /* Текст для состояния ВКЛ (изначально прозрачный) */
-        .slider::before { content: attr(data-on); opacity: 0; }
-        /* Текст для состояния ВЫКЛ (изначально видимый) */
-        .slider::after { content: attr(data-off); opacity: 1; }
+        /* Стили для сетки кнопок */
+        #switches-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr); /* 2 колонки */
+            gap: 12px; /* Промежуток между кнопками */
+            margin-bottom: 25px;
+        }
+        .grid-btn {
+            background-color: #e9ecef; /* Цвет выключенной кнопки */
+            color: #495057; /* Цвет текста выключенной кнопки */
+            border: none;
+            border-radius: 10px;
+            padding: 15px 5px;
+            font-size: 1em;
+            font-weight: 900;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+            min-height: 70px; /* Минимальная высота для выравнивания */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .grid-btn.active {
+            background-color: #e74c3c; /* Цвет включенной кнопки (красный) */
+            color: white;
+            box-shadow: 0 4px 12px rgba(231, 76, 60, 0.4);
+            transform: translateY(-2px);
+        }
+        .grid-btn:active { transform: translateY(-2px) scale(0.98); }
         
-        /* При включении показываем текст ВКЛ и скрываем текст ВЫКЛ */
-        input:checked + .slider::before { opacity: 1; }
-        input:checked + .slider::after { opacity: 0;  }
+        /* Стили для главных кнопок управления */
+        .master-controls {
+            display: flex;
+            justify-content: space-between;
+            gap: 15px;
+            padding-top: 20px;
+            border-top: 2px solid #f0f2f5;
+        }
         
         /* Стили для общих кнопок */
-        .master-controls { display: flex; justify-content: space-between; gap: 15px; margin-top: 20px; padding-top: 20px; border-top: 2px solid #333; }
-        .master-btn { flex-grow: 1; padding: 12px; font-size: 1em; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; transition: background-color 0.3s, transform 0.1s; color: white; }
+        .master-btn {
+            flex-grow: 1;
+            padding: 12px;
+            font-size: 1em;
+            font-weight: 700;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.1s;
+            color: white;
+        }
         .master-btn:active { transform: scale(0.98); }
-        #master-on-btn { background-color: #28a745; } /* Зеленая кнопка */
-        #master-off-btn { background-color: #dc3545; } /* Красная кнопка */
-        
+        #master-on-btn { background-color: #28a745; }
+        #master-off-btn { background-color: #6c757d; }
+
+        /* Стили для низа страницы */
         .footer_up { display: flex; justify-content: space-between; align-items: center; margin-top: 25px; padding-top: 25px; border-top: 1px solid #eee; font-size: 0.9em; color: #888; }
         .footer_down { display: flex; justify-content: space-between; align-items: center; margin-top: 5px; padding-top: 5px; border-top: 0px solid #eee; font-size: 0.9em; color: #888; }
         #footer-center.connected { color: #28a745; }
@@ -81,7 +115,7 @@ const char* HTML_CONTENT = R"RAW(
         <h1><div class="name" id="name"></div></h1>
         <h2><div class="model" id="model"></div></h2>
         
-        <div id="individual-switches"></div>
+        <div id="switches-grid"></div>
 
         <div class="master-controls">
             <button id="master-on-btn" class="master-btn">Включить всё</button>
@@ -132,12 +166,16 @@ const char* HTML_CONTENT = R"RAW(
 
     // Общая функция для обновления динамических данных - переключателей и температуры
     function updatePage(data) {
+        // Обновляем данные кнопок
         data.states.forEach((state, i) => {
-            const el = document.getElementById(`switch-${i}`);
-            if(el) el.checked = state;
+            const btn = document.getElementById(`btn-${i}`);
+            if (btn) {
+                // Добавляем или убираем класс 'active' для изменения стиля
+                btn.classList.toggle('active', state);
+                // Сохраняем состояние в data-атрибуте
+                btn.dataset.state = state ? '1' : '0';
+            }
         });
-        const masterEl = document.getElementById('switch-master');
-        if(masterEl) masterEl.checked = data.master;
 
         // Обновляем значение температуры
         document.getElementById('footer-right').textContent = `Температура: ${data.analog}°C`;
@@ -164,25 +202,23 @@ const char* HTML_CONTENT = R"RAW(
             
             // Генерируем HTML для переключателей на основе полученных названий
             const labels = config.labels;
-            const individualContainer = document.getElementById('individual-switches');
+            const gridContainer = document.getElementById('switches-grid');
             labels.forEach((label, i) => {
-                const item = document.createElement('div');
-                item.className = 'switch-item';
-                item.innerHTML = `
-                    <span>${label}</span>
-                    <label class="switch">
-                        <input type="checkbox" id="switch-${i}">
-                        <span class="slider" data-on="ВКЛ" data-off="ВЫКЛ"></span>
-                    </label>
-                `;
-                individualContainer.appendChild(item);
-            });
+                const btn = document.createElement('button');
+                btn.id = `btn-${i}`;
+                btn.className = 'grid-btn';
+                btn.textContent = label; // Текст теперь на самой кнопке
+                btn.dataset.state = '0'; // Изначально выключена
 
-            // Назначаем обработчики событий после создания элементов
-            labels.forEach((label, i) => {
-                document.getElementById(`switch-${i}`).addEventListener('change', (e) => sendUpdate(i + 1, e.target.checked));
+                // Добавляем обработчик клика
+                btn.addEventListener('click', () => {
+                    // Переключаем состояние и отправляем на сервер
+                    const newState = btn.dataset.state === '0' ? 1 : 0;
+                    sendUpdate(i + 1, newState);
+                });
+                gridContainer.appendChild(btn);
             });
-            
+ 
             // Обработчики для общих кнопок
             document.getElementById('master-on-btn').addEventListener('click', () => sendUpdate(0, 1));
             document.getElementById('master-off-btn').addEventListener('click', () => sendUpdate(0, 0));

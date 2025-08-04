@@ -5,6 +5,7 @@
 #include "read_temperature.h"
 #include "info.h"
 #include "buildTime.h"
+#include "PCF8575.h"
 
 // Включение/отключение отладки
 // #define DEBUG_ENABLE
@@ -15,12 +16,14 @@
 #endif
 
 // дополнительные переменные
-bool gpioStates[NUM_PINS] = {false};                // Массив состояний GPIO
+uint16_t pinStates = 0;                 // используем 16-битное число для хранения состояний выходов на плате расширения
 int lastButtonState;                                // Последнее состояние кнопки
 bool isHardwareOverride = false;
 ESP8266WebServer server(80);
 uint32_t tmr;                                       // Для таймера измерения температуры
- 
+
+// Инициализация объекта PCF8575 с I2C адресом по умолчанию (0x20)
+PCF8575 pcf8575(0x20);
 
 
 // ФУНКЦИИ-ОБРАБОТЧИКИ ДЛЯ СЕРВЕРА
@@ -29,10 +32,10 @@ uint32_t tmr;                                       // Для таймера и�
 void sendStates() {
     bool masterState = true;
     String json = "{\"states\":[";
-    for (int i = 0; i < NUM_PINS; i++) {
-        json += gpioStates[i] ? "true" : "false";
-        if (i < NUM_PINS - 1) json += ",";
-        if (!gpioStates[i]) masterState = false;
+    for (int i = 0; i < USED_PINS; i++) {
+        bool state = (pinStates >> i) & 1;
+        json += state ? "true" : "false";
+        if (i < USED_PINS - 1) json += ",";
     }
     json += "], \"master\":";
     json += masterState ? "true" : "false";
@@ -45,10 +48,11 @@ void sendStates() {
 // Отправляет статическую конфигурацию: названия элементов и другие лейблы
 void handleGetConfig() {
     String json = "{";
+    json += "\"used_pins\":" + String(USED_PINS) + ",";
     json += "\"labels\":[";
-    for (int i = 0; i < NUM_PINS; i++) {
-        json += "\"" + SWITCH_LABELS[i] + "\"";
-        if (i < NUM_PINS - 1) json += ",";
+    for (int i = 0; i < USED_PINS; i++) {
+        json += "\"" + ALL_SWITCH_LABELS[i] + "\"";
+        if (i < USED_PINS - 1) json += ",";
     }
     json += "],";
     json += "\"name\":\"" + NAME + "\",";
@@ -64,29 +68,36 @@ void handleRoot() {
     server.send(200, "text/html", HTML_CONTENT);
 }
 
-// Инициализация пинов как выходов
+// Инициализация используемых пинов как выходов
 void setAllPins(bool state) {
-    for (int i=0; i < NUM_PINS; i++) {
-        gpioStates[i] = state;
-        digitalWrite(gpioPins[i], state ? HIGH : LOW);
+    uint16_t mask = (1 << USED_PINS) - 1;
+    if (state) {
+        pinStates |= mask; // Включить только используемые биты
+    } else {
+        pinStates &= ~mask; // Выключить только используемые биты
     }
+    pcf8575.write16(pinStates);
 }
 
 // Обработчик для URL "/update"
 void handleUpdate() {
     if (isHardwareOverride) {
-      sendStates();
-      return;
+        sendStates();
+        return;
     }
     int id = server.arg("id").toInt();
     bool state = server.arg("state").toInt() == 1;
 
     if (id == 0) {
         setAllPins(state);
-    } else if (id >= 1 && id <= NUM_PINS) {
+    } else if (id >= 1 && id <= USED_PINS) {
         int pinIndex = id - 1;
-        gpioStates[pinIndex] = state;
-        digitalWrite(gpioPins[pinIndex], state ? HIGH : LOW);
+        if (state) {
+            bitSet(pinStates, pinIndex);
+        } else {
+            bitClear(pinStates, pinIndex);
+        }
+        pcf8575.write16(pinStates);
     }
     sendStates();
 }
@@ -102,13 +113,22 @@ void setup() {
     #ifdef DEBUG_ENABLE
     Serial.begin(115200);
     DEBUG("Start DEBUG");
-    #endif  
+    #endif
 
-    // Инициализация пинов выходов
-    for (int i = 0; i < NUM_PINS; i++) {
-        pinMode(gpioPins[i], OUTPUT);
-        digitalWrite(gpioPins[i], LOW);
+    // инициализация i2c-шины
+    Wire.begin(D2, D1);
+
+    // проверка подключения модуля расширения портов
+    #ifdef DEBUG_ENABLE
+    if (!pcf8575.begin()) {
+        Serial.println("PCF8575 не найден!");
+    } else {
+        Serial.println("PCF8575 найден.");
     }
+    #endif
+    
+    // инициализация выходов
+    // pcf8575.pinMode(i, OUTPUT);
 
     // Инициализация пина кнопки
     pinMode(BUTTON_PIN, INPUT_PULLUP);
