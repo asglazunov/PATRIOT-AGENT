@@ -1,6 +1,11 @@
 // --- ETHERNET ---
 
 // Настройки модуля W5500
+// Подключение:
+// D5 GPIO_14 SCLK
+// D6 GPIO_12 MISO
+// D7 GPIO_13 MOSI
+// D8 GPIO_15 SCS (Chip Select)
 
 #pragma once
 // #include <Ethernet.h>
