@@ -1,3 +1,5 @@
+// --- HTML ---
+
 // HTML, CSS и JavaScript для веб-страницы, используем C++ Raw String Literal для удобства
 
 const char* HTML_CONTENT = R"RAW(

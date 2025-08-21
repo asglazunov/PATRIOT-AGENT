@@ -1,8 +1,6 @@
-// --- ОСНОВНЫЕ НАСТРОЙКИ ---
-// Имя и пароль для точки доступа Wi-Fi
-const char* ssid = "astracom wi-fi 2.4 Ghz";
-const char* password = "fhvbz42yjcf++";
+// --- КОНСТАНТЫ ---
 
+// вспомогательная константа для вывода текста
 const String BL = "-";
 
 // GPIO для аппаратной кнопки
@@ -12,3 +10,7 @@ const String BL = "-";
 
 // Пин для термистора
 #define T_PIN A0
+
+// Пин Chip Select (CS) для модуля W5500. 
+// На NodeMCU обычно используют D8.
+#define W5500_CS_PIN D8

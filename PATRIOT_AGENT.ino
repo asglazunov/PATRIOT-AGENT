@@ -1,11 +1,15 @@
-#include <ESP8266WiFi.h>
-#include <ESP8266WebServer.h>
+// --- ОСНОВНОЙ КОД ---
+
+#include <SPI.h>
+#include <Ethernet_Generic.h>
+#include <EthernetWebServer.h>
+#include <buildTime.h>
+#include <PCF8575.h>
 #include "html.h"
 #include "consts.h"
 #include "read_temperature.h"
 #include "info.h"
-#include "buildTime.h"
-#include "PCF8575.h"
+#include "ip.h"
 
 // Включение/отключение отладки
 // #define DEBUG_ENABLE
@@ -15,16 +19,15 @@
 #define DEBUG(x)
 #endif
 
-// дополнительные переменные
+// Дополнительные переменные
 uint16_t pinStates = 0;                 // используем 16-битное число для хранения состояний выходов на плате расширения
 int lastButtonState;                                // Последнее состояние кнопки
 bool isHardwareOverride = false;
-ESP8266WebServer server(80);
+EthernetWebServer server(80);
 uint32_t tmr;                                       // Для таймера измерения температуры
 
-// Инициализация объекта PCF8575 с I2C адресом по умолчанию (0x20)
+// Инициализация платы расширения GPIO PCF8575 с I2C адресом по умолчанию (0x20)
 PCF8575 pcf8575(0x20);
-
 
 // ФУНКЦИИ-ОБРАБОТЧИКИ ДЛЯ СЕРВЕРА
 
@@ -127,9 +130,6 @@ void setup() {
     }
     #endif
     
-    // инициализация выходов
-    // pcf8575.pinMode(i, OUTPUT);
-
     // Инициализация пина кнопки
     pinMode(BUTTON_PIN, INPUT_PULLUP);
     lastButtonState = digitalRead(BUTTON_PIN);
@@ -139,15 +139,25 @@ void setup() {
     // Инициализация пина термистора
     pinMode(T_PIN, INPUT);
 
-    // Подключаемся к Wi-Fi
-    WiFi.begin(ssid, password);
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(1000);
-        DEBUG("Connecting to WiFi..");
+    // Инициализируем ethernet-соединение
+    DEBUG("Starting Ethernet with static IP...");
+    Ethernet.init(W5500_CS_PIN); // Указываем пин CS
+    Ethernet.begin(mac, ip, dns, gateway, subnet); // Запускаем Ethernet со статическим IP
+
+    // Проверка подключения
+    if (Ethernet.hardwareStatus() == EthernetNoHardware) {
+        DEBUG("Ethernet shield was not found.  Sorry, can't run without hardware. :(");
+        while (true) {
+          delay(1); // Блокируем выполнение, если модуль не найден
+        }
+    }
+    if (Ethernet.linkStatus() == LinkOFF) {
+        DEBUG("Ethernet cable is not connected.");
     }
 
-    // Выводим полученный IP адрес
-    DEBUG(WiFi.localIP());
+    // Выводим IP-адрес в Serial
+    DEBUG("Ethernet IP address: ");
+    DEBUG(Ethernet.localIP());
 
     // Регистрация обработчиков URL
     server.on("/", HTTP_GET, handleRoot);
@@ -160,6 +170,9 @@ void setup() {
 }
 
 void loop() {
+    // Для некоторых версий библиотеки это помогает поддерживать соединение
+    Ethernet.maintain();
+    
     // Обработка клиентских запросов
     server.handleClient();
 
